@@ -7,7 +7,7 @@
     "run-backend": "npm run dev --prefix src/backend",
     "run-frontend": "npm run dev --prefix src/frontend",
     "dev": "concurrently \"npm run run-backend\" \"npm run run-frontend\"",
-    "build-mobile": "cd src/mobile && npx expo prebuild --platform android --no-install && cd android && gradlew.bat assembleRelease && cd ../../../ && copy src\\mobile\\android\\app\\build\\outputs\\apk\\release\\app-release.apk apk\\app-release.apk"
+    "build-mobile": "cd src/mobile && npx expo prebuild --platform android --no-install && cd android && gradlew.bat assembleRelease && cd ../../../ && copy src\\mobile\\android\\app\\build\\outputs\\apk\\release\\app-release.apk exe\\app-release.apk"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
