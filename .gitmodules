@@ -1,9 +1,12 @@
 [submodule "src/backend"]
 	path = src/backend
 	url = https://github.com/muuhesham/graduation_project.git
+	branch = main
 [submodule "src/frontend"]
 	path = src/frontend
 	url = https://github.com/AmrKhaled996/Event-Agency.git
+	branch = main
 [submodule "src/mobile"]
 	path = src/mobile
 	url = https://github.com/AmrKhaled996/Fa3liat_Scan.git
+	branch = main
