@@ -1,0 +1,14 @@
+{
+  "name": "project-root",
+  "version": "1.0.0",
+  "description": "Mono-repo for Graduation Project",
+  "scripts": {
+    "install-all": "npm install && npm install --prefix src/backend && npm install --prefix src/frontend && npm install --prefix src/mobile",
+    "run-backend": "npm run dev --prefix src/backend",
+    "run-frontend": "npm run dev --prefix src/frontend",
+    "build-mobile": "cd src/mobile && npx expo prebuild --platform android --no-install && cd android && gradlew.bat assembleRelease && cd ../../../ && copy src\\mobile\\android\\app\\build\\outputs\\apk\\release\\app-release.apk apk\\app-release.apk"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
