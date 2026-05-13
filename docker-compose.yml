@@ -50,7 +50,7 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=-1
     ports:
-      - '11435:11434'
+      - '11434:11434'
     volumes:
       - ollama_data:/root/.ollama
     # Pull model automatically and keep in memory
@@ -86,8 +86,8 @@ services:
       - MAIL_HOST=mailhog
       - OLLAMA_BASE_URL=http://ollama:11434
     ports:
-      - '3001:3000'
-      - '8001:8000'
+      - '3000:3000'
+      - '8000:8000'
     volumes:
       - ./src/backend:/app
       - /app/node_modules
@@ -120,11 +120,15 @@ services:
         condition: service_healthy
     env_file:
       - ./src/frontend/.env
+    environment:
+      - VITE_API_URL=http://backend:3000
     ports:
       - '5173:5173'
     volumes:
       - ./src/frontend:/app
       - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
 
 volumes:
   postgres_data:
