@@ -1,0 +1,132 @@
+name: graduation-project
+
+services:
+  # --- Core Infrastructure ---
+  db:
+    container_name: gp-database
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fa3liat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fa3liat}
+      POSTGRES_DB: ${POSTGRES_DB:-fa3liat}
+    ports:
+      - '5433:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER:-fa3liat} -d $${POSTGRES_DB:-fa3liat}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: gp-cache
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6380:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailhog:
+    container_name: gp-mail-test
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    ports:
+      - '8027:8025'
+      - '1025:1025'
+
+  # --- Optimized & Lightweight AI Infrastructure ---
+  ollama:
+    container_name: gp-ai-engine
+    image: alpine/ollama:latest
+    restart: unless-stopped
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
+    ports:
+      - '11435:11434'
+    volumes:
+      - ollama_data:/root/.ollama
+    # Pull model automatically and keep in memory
+    entrypoint: >
+      sh -c "ollama serve & 
+             sleep 5 && 
+             ollama pull nomic-embed-text-v2-moe:latest && 
+             wait"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # --- Unified Backend Service (Server + Workers + Auto-init) ---
+  backend:
+    container_name: gp-backend
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    image: gp-backend-image
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./src/backend/.env
+    environment:
+      - DATABASE_URL=postgresql://fa3liat:fa3liat@db:5432/fa3liat?schema=public
+      - REDIS_URL=redis://redis:6379
+      - MAIL_HOST=mailhog
+      - OLLAMA_BASE_URL=http://ollama:11434
+    ports:
+      - '3001:3000'
+      - '8001:8000'
+    volumes:
+      - ./src/backend:/app
+      - /app/node_modules
+      - ./src/backend/uploads:/app/uploads
+      - ./src/backend/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "node", "-e", "import('http').then(h=>h.get('http://localhost:3000/api/v1/home/latest-events',r=>process.exit(r.statusCode===200?0:1)))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    command: >
+      sh -c "npx prisma migrate deploy && 
+             (npx prisma db seed || true) &&
+             npm run queue:mail-worker & 
+             npm run queue:sms-worker & 
+             npm run queue:embedding-worker & 
+             npm run dev"
+
+  # --- Lightweight Frontend Service ---
+  frontend:
+    container_name: gp-frontend
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    image: gp-frontend-image
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    env_file:
+      - ./src/frontend/.env
+    ports:
+      - '5173:5173'
+    volumes:
+      - ./src/frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:
