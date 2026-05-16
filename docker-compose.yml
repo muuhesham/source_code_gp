@@ -1,4 +1,4 @@
-name: graduation-project
+name: fa3liat
 
 services:
   # --- Core Infrastructure ---
@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fa3liat}
       POSTGRES_DB: ${POSTGRES_DB:-fa3liat}
     ports:
-      - '5433:5432'
+      - '${DB_PORT:-5434}:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -25,7 +25,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - '6380:6379'
+      - '${REDIS_PORT:-6381}:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -39,10 +39,9 @@ services:
     image: mailhog/mailhog:v1.0.1
     restart: unless-stopped
     ports:
-      - '8027:8025'
-      - '1025:1025'
+      - '${MAIL_UI_PORT:-8028}:8025' # UI
+      - '${MAIL_SMTP_PORT:-1025}:1025' # SMTP
 
-  # --- Optimized & Lightweight AI Infrastructure ---
   ollama:
     container_name: gp-ai-engine
     image: alpine/ollama:latest
@@ -50,28 +49,104 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=-1
     ports:
-      - '11434:11434'
+      - '${OLLAMA_PORT:-11436}:11434'
     volumes:
       - ollama_data:/root/.ollama
-    # Pull model automatically and keep in memory
-    entrypoint: >
-      sh -c "ollama serve & 
-             sleep 5 && 
-             ollama pull nomic-embed-text-v2-moe:latest && 
-             wait"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 10s
       retries: 5
 
-  # --- Unified Backend Service (Server + Workers + Auto-init) ---
+  # Helper to pull the model
+  ollama-model:
+    image: alpine/ollama:latest
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    volumes:
+      - ollama_data:/root/.ollama
+    command: pull ${OLLAMA_MODEL:-nomic-embed-text-v2-moe:latest}
+    restart: "no"
+
+  # --- Workers (Start by default) ---
+  mail-worker:
+    container_name: gp-mail-worker
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./src/backend/.env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - MAIL_HOST=${MAIL_HOST:-mailhog}
+      - MAIL_PORT=${MAIL_PORT:-1025}
+    command: npm run queue:mail-worker
+
+  sms-worker:
+    container_name: gp-sms-worker
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./src/backend/.env
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    command: npm run queue:sms-worker
+
+  embedding-worker:
+    container_name: gp-embedding-worker
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    env_file:
+      - ./src/backend/.env
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://fa3liat:fa3liat@db:5432/fa3liat?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+    command: npm run queue:embedding-worker
+
+  # --- Stripe CLI (Starts by default) ---
+  stripe:
+    container_name: gp-stripe-cli
+    image: stripe/stripe-cli:latest
+    restart: unless-stopped
+    env_file:
+      - ./src/backend/.env
+    environment:
+      - STRIPE_API_KEY=${STRIPE_SECRET_KEY}
+    command: >-
+      listen
+      --forward-to backend:3000/api/v1/payments/webhook
+      --events checkout.session.completed,payment_intent.payment_failed
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- Backend ---
   backend:
     container_name: gp-backend
     build:
       context: ./src/backend
       dockerfile: Dockerfile
-    image: gp-backend-image
     restart: unless-stopped
     depends_on:
       db:
@@ -81,54 +156,47 @@ services:
     env_file:
       - ./src/backend/.env
     environment:
-      - DATABASE_URL=postgresql://fa3liat:fa3liat@db:5432/fa3liat?schema=public
-      - REDIS_URL=redis://redis:6379
-      - MAIL_HOST=mailhog
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - PORT=${PORT:-3000}
+      - BIND_HOST=${BIND_HOST:-0.0.0.0}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://fa3liat:fa3liat@db:5432/fa3liat?schema=public}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - MAIL_HOST=${MAIL_HOST:-mailhog}
+      - MAIL_PORT=${MAIL_PORT:-1025}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
     ports:
-      - '3000:3000'
-      - '8000:8000'
+      - '${PORT:-3000}:${PORT:-3000}'
     volumes:
       - ./src/backend:/app
       - /app/node_modules
       - ./src/backend/uploads:/app/uploads
       - ./src/backend/logs:/app/logs
-    healthcheck:
-      test: ["CMD", "node", "-e", "import('http').then(h=>h.get('http://localhost:3000/api/v1/home/latest-events',r=>process.exit(r.statusCode===200?0:1)))"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
     command: >
-      sh -c "npx prisma migrate deploy && 
-             (npx prisma db seed || true) &&
-             npm run queue:mail-worker & 
-             npm run queue:sms-worker & 
-             npm run queue:embedding-worker & 
+      sh -c "npx prisma migrate reset --force --skip-seed &&
+             npx prisma migrate deploy &&
+             npm run prisma:seed &&
              npm run dev"
 
-  # --- Lightweight Frontend Service ---
+  # --- Frontend ---
   frontend:
     container_name: gp-frontend
     build:
       context: ./src/frontend
       dockerfile: Dockerfile
-    image: gp-frontend-image
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     env_file:
       - ./src/frontend/.env
     environment:
-      - VITE_API_URL=http://backend:3000
+      - VITE_API_URL=${VITE_API_URL:-/api}
+      - VITE_SOCKET_URL=${VITE_SOCKET_URL:-/}
+      - VITE_API_PROXY_TARGET=${VITE_API_PROXY_TARGET:-http://backend:3000}
     ports:
-      - '5173:5173'
+      - '${FRONT_PORT:-5173}:5173'
     volumes:
       - ./src/frontend:/app
       - /app/node_modules
     command: npm run dev -- --host 0.0.0.0
-
 
 volumes:
   postgres_data:
