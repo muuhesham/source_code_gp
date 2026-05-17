@@ -2,16 +2,6 @@
 
 Fa3liat is a production-grade Event Management & E-Ticketing system designed for seamless event organization and secure ticket purchasing. The platform offers a robust backend API, a responsive web dashboard for organizers and attendees, and a specialized mobile application for real-time QR-based ticket validation.
 
-## 🌟 Project Overview
-
-Fa3liat provides a complete end-to-end solution for:
-- **Ticketing System:** Secure QRcode ticket purchasing with Stripe integration, supporting both free and paid events.
-- **Seat Selection:** Interactive seat maps for venues with tier-based pricing.
-- **Organizer Dashboard:** Comprehensive tools for managing events, sessions, tickets, and financial payouts.
-- **Mobile Scanner:** Real-time QR code validation app for event staff to verify tickets at the gate.
-- **Real-time Notifications:** Instant updates via Socket.IO and background workers for emails/SMS.
-- **Event Discovery:** AI-powered search and recommendations (RAG) for finding the perfect events.
-
 ---
 
 ## 📂 Repository Structure
@@ -27,6 +17,39 @@ fa3liat/
 ├── docker-compose.yml     # Root orchestration for the entire stack
 └── README.md              # Project documentation
 ```
+
+---
+
+## 📥 Project Setup / Clone Repository
+
+This project uses **Git Submodules** to manage the frontend, backend, and mobile components as separate repositories. This architecture allows each part of the platform to be developed and versioned independently while remaining part of a unified stack.
+
+### 1. Cloning for the First Time
+To clone the main repository and automatically pull all submodule source code in one step:
+
+```bash
+git clone --recurse-submodules <repo-url>
+```
+
+### 2. If You Already Cloned (Empty Folders)
+If you have already cloned the repository normally and find the `src/` subdirectories empty, run the following to initialize and fetch the code:
+
+```bash
+git submodule update --init --recursive
+```
+
+### 3. Keeping Submodules Updated
+When pulling new changes from the main repository, ensure your submodules are also updated to their latest pinned commits:
+
+```bash
+git pull origin main
+git submodule update --recursive
+```
+
+### ⚠️ Troubleshooting
+- **Empty Folders**: If `src/backend`, `src/frontend`, or `src/mobile` are empty after cloning, run the initialization command in Step 2.
+- **Submodule Not Updated**: If the project fails to build after a pull, your submodules might be out of sync. Run `git submodule update --recursive`.
+- **Detached HEAD Warning**: Submodules are pinned to specific commits. It is normal for them to be in a "detached HEAD" state. If you need to make changes within a submodule, remember to `git checkout main` (or your target branch) inside that specific directory first.
 
 ---
 
