@@ -116,6 +116,17 @@ npm install
 npm run dev
 ```
 
+### Mobile App Setup (Scanner)
+To run the mobile application for ticket scanning:
+1. **Download Expo Go**: Install the **Expo Go** app from the [Google Play Store](https://play.google.com/store/apps/details?id=host.exp.exponent) or [Apple App Store](https://apps.apple.com/app/expo-go/id982107779) to open our mobile app.
+2. **Start the App**:
+   ```bash
+   cd src/mobile
+   npm install
+   npx expo start
+   ```
+3. **Open the App**: Scan the QR code displayed in your terminal using the Expo Go app to start scanning tickets.
+
 ---
 
 ## 🔐 Environment Variables
@@ -132,14 +143,4 @@ npm run dev
 
 ---
 
-## 📖 Available Commands
-
-### Backend
-- `npm run setup`: Full database initialization (migrate + seed).
-- `npm run dev`: Start API with hot-reload.
-- `npm run queue:mail-worker`: Start email background worker.
-- `npm run queue:sms-worker`: Start SMS background worker.
-- `npm run queue:embedding-worker`: Start AI vector worker.
-
----
 **Fa3liat** — Built with ❤️ for Graduation Project 2026.
